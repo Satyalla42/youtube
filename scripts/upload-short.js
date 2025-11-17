@@ -211,17 +211,29 @@ async function uploadToYouTube(videoPath, videoInfo) {
 
   // Always refresh the access token to ensure it's valid
   // Access tokens expire after 1 hour, so we refresh every time
+  console.log('🔄 Refreshing access token...');
+  console.log('Refresh token length:', YOUTUBE_REFRESH_TOKEN ? YOUTUBE_REFRESH_TOKEN.length : 0);
+  
   try {
-    console.log('Refreshing access token...');
     oauth2Client.setCredentials({
       refresh_token: YOUTUBE_REFRESH_TOKEN
     });
     
+    console.log('Calling refreshAccessToken()...');
     const { credentials } = await oauth2Client.refreshAccessToken();
+    
+    if (!credentials || !credentials.access_token) {
+      throw new Error('Failed to get access token from refresh');
+    }
+    
     oauth2Client.setCredentials(credentials);
     console.log('✅ Access token refreshed successfully');
+    console.log('New access token length:', credentials.access_token ? credentials.access_token.length : 0);
   } catch (error) {
-    if (error.message.includes('invalid_client') || error.message.includes('invalid_grant')) {
+    console.error('❌ Token refresh failed:', error.message);
+    console.error('Full error:', error);
+    
+    if (error.message && (error.message.includes('invalid_client') || error.message.includes('invalid_grant'))) {
       throw new Error(`Invalid OAuth credentials. Please verify:\n` +
         `1. Refresh token is valid and not expired\n` +
         `2. Client ID and Secret are correct\n` +
@@ -230,7 +242,7 @@ async function uploadToYouTube(videoPath, videoInfo) {
         `5. You may need to generate a new refresh token from OAuth Playground\n` +
         `Original error: ${error.message}`);
     }
-    if (error.message.includes('Invalid Credentials')) {
+    if (error.message && error.message.includes('Invalid Credentials')) {
       throw new Error(`Invalid credentials. The refresh token may have expired or been revoked.\n` +
         `Please generate a new refresh token from OAuth Playground:\n` +
         `https://developers.google.com/oauthplayground/\n` +
