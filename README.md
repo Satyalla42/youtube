@@ -10,8 +10,6 @@ Automated workflow to upload YouTube Shorts from Pixabay videos using GitHub Act
 
 Go to your repository → Settings → Secrets and variables → Actions, and add the following secrets:
 
-> **Note**: You do NOT need a GitHub personal access token for this workflow. The workflow only needs YouTube OAuth credentials and a Pixabay API key.
-
 #### Required Secrets:
 
 - **`PIXABAY_API_KEY`**: Your Pixabay API key
