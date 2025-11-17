@@ -186,8 +186,12 @@ async function uploadToYouTube(videoPath, videoInfo) {
   console.log('Using Client ID:', YOUTUBE_CLIENT_ID.substring(0, 20) + '...');
   console.log('Refresh token present:', YOUTUBE_REFRESH_TOKEN ? 'Yes' : 'No');
 
-  // For web OAuth clients, use the redirect URI from the JSON file if available
+  // For refresh tokens, the redirect URI must match what was used when generating the token
+  // Since this is server-to-server, we can use any redirect URI that matches the OAuth client config
+  // But the refresh token must have been generated with the same redirect URI
   let redirectUri = 'http://localhost';
+  
+  // Try to use the redirect URI from the JSON file (this is what was used when generating the token)
   try {
     const clientSecretFiles = fs.readdirSync(path.join(__dirname, '..'))
       .filter(file => file.startsWith('client_secret') && file.endsWith('.json'));
@@ -195,13 +199,19 @@ async function uploadToYouTube(videoPath, videoInfo) {
       const credsPath = path.join(__dirname, '..', clientSecretFiles[0]);
       const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
       if (creds.web?.redirect_uris && creds.web.redirect_uris.length > 0) {
+        // Use the first redirect URI from the config
         redirectUri = creds.web.redirect_uris[0];
         console.log('Using redirect URI from JSON:', redirectUri);
+      } else if (creds.installed?.redirect_uris && creds.installed.redirect_uris.length > 0) {
+        redirectUri = creds.installed.redirect_uris[0];
+        console.log('Using redirect URI from installed app config:', redirectUri);
       }
     }
   } catch (error) {
     console.warn('Could not load redirect URI from JSON, using default:', error.message);
   }
+  
+  console.log('OAuth redirect URI:', redirectUri);
 
   const oauth2Client = new google.auth.OAuth2(
     YOUTUBE_CLIENT_ID,
@@ -231,8 +241,19 @@ async function uploadToYouTube(videoPath, videoInfo) {
     console.log('New access token length:', credentials.access_token ? credentials.access_token.length : 0);
   } catch (error) {
     console.error('❌ Token refresh failed:', error.message);
-    console.error('Full error:', error);
     
+    if (error.message && error.message.includes('unauthorized_client')) {
+      throw new Error(`OAuth client authorization failed. This usually means:\n` +
+        `1. The refresh token was generated with DIFFERENT OAuth credentials\n` +
+        `2. The Client ID/Secret don't match the token\n` +
+        `3. The OAuth client type doesn't match (web vs installed)\n\n` +
+        `SOLUTION: Generate a NEW refresh token using the EXACT credentials from your JSON file:\n` +
+        `- Client ID: ${YOUTUBE_CLIENT_ID}\n` +
+        `- Use OAuth Playground: https://developers.google.com/oauthplayground/\n` +
+        `- Make sure to use "Use your own OAuth credentials" with the Client ID and Secret above\n` +
+        `- Use redirect URI: ${redirectUri}\n` +
+        `Original error: ${error.message}`);
+    }
     if (error.message && (error.message.includes('invalid_client') || error.message.includes('invalid_grant'))) {
       throw new Error(`Invalid OAuth credentials. Please verify:\n` +
         `1. Refresh token is valid and not expired\n` +
