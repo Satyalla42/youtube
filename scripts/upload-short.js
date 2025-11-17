@@ -216,7 +216,7 @@ async function uploadToYouTube(videoPath, videoInfo) {
   // Clean up title - remove any problematic characters
   title = title.trim().replace(/\s+/g, ' '); // Replace multiple spaces with single space
   
-  const description = `#Shorts #CuteAnimals #Dogs #Cats #PetVideos\n\nSource: ${videoInfo.originalSourceUrl}`;
+  const description = `#Shorts #CuteAnimals #Dogs #Cats #PetVideos`;
   
   console.log('Video title:', title);
   console.log('Title length:', title.length);
@@ -283,7 +283,21 @@ async function main() {
     console.log('Downloading video...');
     await downloadVideo(videoInfo.videoUrl, videoPath);
 
-    console.log('Uploading to YouTube...');
+    // Verify video is vertical (required for Shorts)
+    if (videoInfo.width && videoInfo.height) {
+      const aspectRatio = videoInfo.width / videoInfo.height;
+      const isVertical = videoInfo.height > videoInfo.width;
+      console.log(`Video dimensions: ${videoInfo.width}x${videoInfo.height} (${isVertical ? 'Vertical' : 'Horizontal'})`);
+      console.log(`Aspect ratio: ${aspectRatio.toFixed(2)}`);
+      
+      if (!isVertical) {
+        console.warn('⚠️  Warning: Video is not vertical. YouTube Shorts require vertical videos (9:16 aspect ratio).');
+      } else {
+        console.log('✅ Video is vertical - will be uploaded as a Short');
+      }
+    }
+
+    console.log('Uploading to YouTube as Short...');
     const result = await uploadToYouTube(videoPath, videoInfo);
     console.log(`Upload successful! Video ID: ${result.id}`);
 
