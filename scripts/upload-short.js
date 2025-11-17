@@ -140,6 +140,12 @@ async function uploadToYouTube(videoPath, videoInfo) {
     access_token: YOUTUBE_ACCESS_TOKEN
   });
 
+  // Ensure we have a valid access token
+  if (!YOUTUBE_ACCESS_TOKEN) {
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
+  }
+
   const youtube = google.youtube({
     version: 'v3',
     auth: oauth2Client
@@ -149,7 +155,17 @@ async function uploadToYouTube(videoPath, videoInfo) {
   const description = `#Shorts #CuteAnimals #Dogs #Cats #PetVideos\n\nSource: ${videoInfo.originalSourceUrl}`;
 
   const fileSize = fs.statSync(videoPath).size;
-  const videoFile = fs.readFileSync(videoPath);
+  const videoFile = fs.createReadStream(videoPath);
+  
+  // Detect MIME type from file extension
+  const ext = path.extname(videoPath).toLowerCase();
+  const mimeTypes = {
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.webm': 'video/webm'
+  };
+  const mimeType = mimeTypes[ext] || 'video/mp4';
 
   const response = await youtube.videos.insert({
     part: ['snippet', 'status'],
@@ -167,7 +183,8 @@ async function uploadToYouTube(videoPath, videoInfo) {
       }
     },
     media: {
-      body: videoFile
+      body: videoFile,
+      mimeType: mimeType
     }
   });
 
