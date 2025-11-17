@@ -1,0 +1,17 @@
+{
+  "name": "youtube-shorts-uploader",
+  "version": "1.0.0",
+  "description": "Automated YouTube Shorts uploader using GitHub Actions",
+  "main": "scripts/upload-short.js",
+  "scripts": {
+    "upload": "node scripts/upload-short.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "googleapis": "^126.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+

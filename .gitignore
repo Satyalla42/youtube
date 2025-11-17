@@ -1,0 +1,7 @@
+node_modules/
+temp-video.mp4
+*.log
+.env
+client_secret*.json
+.DS_Store
+

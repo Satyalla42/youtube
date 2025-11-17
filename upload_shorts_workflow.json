@@ -1,0 +1,201 @@
+{
+  "name": "My workflow 2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "549bf6cb-7870-4bd2-abd9-1073a2f14319",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -240
+      ],
+      "id": "127d244e-e4a7-45a0-8719-4711185f1411",
+      "name": "search query"
+    },
+    {
+      "parameters": {
+        "url": "https://pixabay.com/api/videos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "53285472-233b9ed1ac23d1516fe17b3d1"
+            },
+            {
+              "name": "q",
+              "value": "funny dogs"
+            },
+            {
+              "name": "safesearch",
+              "value": "true"
+            },
+            {
+              "name": "lang",
+              "value": "de"
+            },
+            {
+              "name": "orientation",
+              "value": "vertical"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {}
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        256,
+        128
+      ],
+      "id": "e187d90d-754e-4ca2-9909-065c1fc24d96",
+      "name": "Get info from Pixabay"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = [];\nconst inputItem = $json;\nconst hits = inputItem.hits;\n\nif (hits && hits.length > 0) {\n    // Filter for videos that are primarily vertical if possible (height > width)\n    const verticalHits = hits.filter(hit => {\n        // Check if any video file in the hit is vertical\n        if (hit.videos) {\n            for (const key in hit.videos) {\n                if (hit.videos[key] && hit.videos[key].width && hit.videos[key].height) {\n                    if (hit.videos[key].height > hit.videos[key].width) {\n                        return true; // Found a vertical version\n                    }\n                }\n            }\n        }\n        return false;\n    });\n\n    const videosToProcess = verticalHits.length > 0 ? verticalHits : hits; // Fallback to all if no vertical found\n\n    if (videosToProcess.length > 0) {\n        // Pick a random hit (video entry) from the potentially filtered results\n        const randomIndex = Math.floor(Math.random() * videosToProcess.length);\n        const selectedHit = videosToProcess[randomIndex];\n\n        let downloadUrl = null;\n        let videoFileKey = null;\n\n        // Prioritize vertical formats, then quality\n        // Check for vertical first (height > width)\n        const sortedVideoFiles = Object.keys(selectedHit.videos)\n            .filter(key => selectedHit.videos[key] && selectedHit.videos[key].url) // Ensure valid video file\n            .sort((a, b) => {\n                const videoA = selectedHit.videos[a];\n                const videoB = selectedHit.videos[b];\n                const isAVertical = videoA.height > videoA.width;\n                const isBVertical = videoB.height > videoB.width;\n\n                if (isAVertical && !isBVertical) return -1; // A is vertical, B is not, A comes first\n                if (!isAVertical && isBVertical) return 1;  // B is vertical, A is not, B comes first\n\n                // If both are vertical or both are landscape, prioritize by size/quality (e.g., largest)\n                return videoB.size - videoA.size;\n            });\n\n        for (const key of sortedVideoFiles) {\n            downloadUrl = selectedHit.videos[key].url;\n            videoFileKey = key;\n            if (selectedHit.videos[key].height > selectedHit.videos[key].width) { // Found a good vertical one\n                break;\n            }\n            // If we didn't find a vertical one, the loop will just pick the largest available by default\n        }\n\n\n        if (downloadUrl) {\n            items.push({\n                json: {\n                    videoUrl: downloadUrl,\n                    videoTitle: selectedHit.tags.replace(/, /g, ' ').trim() || 'Untitled Short',\n                    originalSourceUrl: selectedHit.pageURL,\n                    width: selectedHit.videos[videoFileKey]?.width,\n                    height: selectedHit.videos[videoFileKey]?.height\n                }\n            });\n        }\n    }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        128
+      ],
+      "id": "d39498c8-c9b1-4e61-9dc4-cbfd998d5e60",
+      "name": "Output only one random video"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.videoUrl }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        640,
+        128
+      ],
+      "id": "bb0645d7-98e4-4eeb-b756-e33cb10c6631",
+      "name": "Get binary video file"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "=#shorts #dog",
+        "regionCode": "DE",
+        "categoryId": "15",
+        "options": {
+          "description": "#Shorts #CuteAnimals #Dogs #Cats #PetVideos"
+        }
+      },
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -64
+      ],
+      "id": "95036f19-0ba2-489a-bd9f-427649335195",
+      "name": "Upload a video",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "8RzkPGxsOyiVaSJs",
+          "name": "YouTube account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "search query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search query": {
+      "main": [
+        [
+          {
+            "node": "Get info from Pixabay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get info from Pixabay": {
+      "main": [
+        [
+          {
+            "node": "Output only one random video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output only one random video": {
+      "main": [
+        [
+          {
+            "node": "Get binary video file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get binary video file": {
+      "main": [
+        [
+          {
+            "node": "Upload a video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5f05805a-9ac7-46d6-8c71-8058b760b82c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc13df629e35f4e85eb7e5ba27dc5575822f96b5e10ecb42405fa3a560f4c82d"
+  },
+  "id": "HIpoPTN9z4HBzQ76",
+  "tags": []
+}
