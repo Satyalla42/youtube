@@ -216,10 +216,15 @@ async function uploadToYouTube(videoPath, videoInfo) {
   // Clean up title - remove any problematic characters
   title = title.trim().replace(/\s+/g, ' '); // Replace multiple spaces with single space
   
+  // Description without source URL - just hashtags for Shorts
   const description = `#Shorts #CuteAnimals #Dogs #Cats #PetVideos`;
+  
+  // Tags to help YouTube recognize it as a Short
+  const tags = ['shorts', 'dog', 'cute', 'animals', 'pets', 'funny'];
   
   console.log('Video title:', title);
   console.log('Title length:', title.length);
+  console.log('Description:', description);
 
   const fileSize = fs.statSync(videoPath).size;
   const videoFile = fs.createReadStream(videoPath);
@@ -240,6 +245,7 @@ async function uploadToYouTube(videoPath, videoInfo) {
       snippet: {
         title: title,
         description: description,
+        tags: tags,
         categoryId: '15',
         defaultLanguage: 'de',
         defaultAudioLanguage: 'de'
