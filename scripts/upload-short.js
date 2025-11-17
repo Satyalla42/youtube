@@ -129,10 +129,41 @@ async function downloadVideo(url, outputPath) {
 }
 
 async function uploadToYouTube(videoPath, videoInfo) {
+  // Validate credentials
+  if (!YOUTUBE_CLIENT_ID) {
+    throw new Error('YOUTUBE_CLIENT_ID is missing. Set it as an environment variable or ensure client_secret_*.json file exists.');
+  }
+  if (!YOUTUBE_CLIENT_SECRET) {
+    throw new Error('YOUTUBE_CLIENT_SECRET is missing. Set it as an environment variable or ensure client_secret_*.json file exists.');
+  }
+  if (!YOUTUBE_REFRESH_TOKEN) {
+    throw new Error('YOUTUBE_REFRESH_TOKEN is missing. Get it from OAuth Playground (see README.md).');
+  }
+
+  console.log('Using Client ID:', YOUTUBE_CLIENT_ID.substring(0, 20) + '...');
+  console.log('Refresh token present:', YOUTUBE_REFRESH_TOKEN ? 'Yes' : 'No');
+
+  // For web OAuth clients, use the redirect URI from the JSON file if available
+  let redirectUri = 'http://localhost';
+  try {
+    const clientSecretFiles = fs.readdirSync(path.join(__dirname, '..'))
+      .filter(file => file.startsWith('client_secret') && file.endsWith('.json'));
+    if (clientSecretFiles.length > 0) {
+      const credsPath = path.join(__dirname, '..', clientSecretFiles[0]);
+      const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+      if (creds.web?.redirect_uris && creds.web.redirect_uris.length > 0) {
+        redirectUri = creds.web.redirect_uris[0];
+        console.log('Using redirect URI from JSON:', redirectUri);
+      }
+    }
+  } catch (error) {
+    console.warn('Could not load redirect URI from JSON, using default:', error.message);
+  }
+
   const oauth2Client = new google.auth.OAuth2(
     YOUTUBE_CLIENT_ID,
     YOUTUBE_CLIENT_SECRET,
-    'http://localhost' // Redirect URI (not used in server-to-server)
+    redirectUri
   );
 
   oauth2Client.setCredentials({
@@ -141,9 +172,23 @@ async function uploadToYouTube(videoPath, videoInfo) {
   });
 
   // Ensure we have a valid access token
-  if (!YOUTUBE_ACCESS_TOKEN) {
-    const { credentials } = await oauth2Client.refreshAccessToken();
-    oauth2Client.setCredentials(credentials);
+  try {
+    if (!YOUTUBE_ACCESS_TOKEN) {
+      console.log('No access token provided, refreshing...');
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(credentials);
+      console.log('Access token refreshed successfully');
+    }
+  } catch (error) {
+    if (error.message.includes('invalid_client')) {
+      throw new Error(`Invalid OAuth client credentials. Please verify:\n` +
+        `1. Client ID and Secret are correct\n` +
+        `2. OAuth client is enabled in Google Cloud Console\n` +
+        `3. YouTube Data API v3 is enabled\n` +
+        `4. Redirect URI matches: ${redirectUri}\n` +
+        `Original error: ${error.message}`);
+    }
+    throw error;
   }
 
   const youtube = google.youtube({
@@ -193,6 +238,17 @@ async function uploadToYouTube(videoPath, videoInfo) {
 
 async function main() {
   try {
+    // Check if refresh token is set
+    if (!YOUTUBE_REFRESH_TOKEN) {
+      console.error('\n❌ ERROR: YOUTUBE_REFRESH_TOKEN is not set!');
+      console.error('\nTo fix this:');
+      console.error('1. Get a refresh token from OAuth Playground: https://developers.google.com/oauthplayground/');
+      console.error('2. Set it as an environment variable:');
+      console.error('   export YOUTUBE_REFRESH_TOKEN="your-refresh-token-here"');
+      console.error('\nSee README.md or SETUP_ACTIONS.md for detailed instructions.\n');
+      process.exit(1);
+    }
+
     console.log('Searching Pixabay for videos...');
     const pixabayData = await searchPixabay();
 
