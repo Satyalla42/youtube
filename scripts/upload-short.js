@@ -196,8 +196,30 @@ async function uploadToYouTube(videoPath, videoInfo) {
     auth: oauth2Client
   });
 
-  const title = `#shorts #dog ${videoInfo.videoTitle}`;
+  // Create title - ensure it's valid and not too long (YouTube limit: 100 chars)
+  let title = `#shorts #dog ${videoInfo.videoTitle}`;
+  
+  // Truncate if too long (YouTube max is 100 characters)
+  if (title.length > 100) {
+    // Keep "#shorts #dog " prefix and truncate the rest
+    const prefix = '#shorts #dog ';
+    const maxRemaining = 100 - prefix.length;
+    const truncated = videoInfo.videoTitle.substring(0, maxRemaining);
+    title = prefix + truncated;
+  }
+  
+  // Ensure title is not empty
+  if (!title || title.trim().length === 0) {
+    title = '#shorts #dog Cute Dog Video';
+  }
+  
+  // Clean up title - remove any problematic characters
+  title = title.trim().replace(/\s+/g, ' '); // Replace multiple spaces with single space
+  
   const description = `#Shorts #CuteAnimals #Dogs #Cats #PetVideos\n\nSource: ${videoInfo.originalSourceUrl}`;
+  
+  console.log('Video title:', title);
+  console.log('Title length:', title.length);
 
   const fileSize = fs.statSync(videoPath).size;
   const videoFile = fs.createReadStream(videoPath);
