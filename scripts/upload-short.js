@@ -42,6 +42,35 @@ async function searchPixabay() {
   return response.data;
 }
 
+function loadUploadedVideos() {
+  const uploadedFile = path.join(__dirname, '..', 'uploaded-videos.json');
+  try {
+    if (fs.existsSync(uploadedFile)) {
+      const data = fs.readFileSync(uploadedFile, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.warn('Could not load uploaded videos list:', error.message);
+  }
+  return { uploaded: [] };
+}
+
+function saveUploadedVideo(videoUrl, videoId) {
+  const uploadedFile = path.join(__dirname, '..', 'uploaded-videos.json');
+  try {
+    const data = loadUploadedVideos();
+    data.uploaded.push({
+      url: videoUrl,
+      videoId: videoId,
+      uploadedAt: new Date().toISOString()
+    });
+    fs.writeFileSync(uploadedFile, JSON.stringify(data, null, 2), 'utf8');
+    console.log('✅ Saved to uploaded videos list');
+  } catch (error) {
+    console.warn('Could not save uploaded video to list:', error.message);
+  }
+}
+
 function selectRandomVideo(data) {
   const hits = data.hits;
 
@@ -49,8 +78,18 @@ function selectRandomVideo(data) {
     throw new Error('No videos found');
   }
 
-  // Filter for videos that are primarily vertical
+  // Load list of already uploaded videos
+  const uploadedData = loadUploadedVideos();
+  const uploadedUrls = new Set(uploadedData.uploaded.map(item => item.url));
+  console.log(`Already uploaded: ${uploadedUrls.size} videos`);
+
+  // Filter for videos that are primarily vertical AND not already uploaded
   const verticalHits = hits.filter(hit => {
+    // Skip if already uploaded
+    if (hit.pageURL && uploadedUrls.has(hit.pageURL)) {
+      return false;
+    }
+    
     if (hit.videos) {
       for (const key in hit.videos) {
         if (hit.videos[key] && hit.videos[key].width && hit.videos[key].height) {
@@ -63,11 +102,15 @@ function selectRandomVideo(data) {
     return false;
   });
 
-  const videosToProcess = verticalHits.length > 0 ? verticalHits : hits;
+  const videosToProcess = verticalHits.length > 0 ? verticalHits : hits.filter(hit => 
+    !hit.pageURL || !uploadedUrls.has(hit.pageURL)
+  );
 
   if (videosToProcess.length === 0) {
-    throw new Error('No suitable videos found');
+    throw new Error(`No new videos found. All ${hits.length} videos from this search have already been uploaded. Try a different search query or wait for new videos.`);
   }
+  
+  console.log(`Found ${videosToProcess.length} new videos to choose from`);
 
   // Pick a random video
   const randomIndex = Math.floor(Math.random() * videosToProcess.length);
@@ -306,6 +349,10 @@ async function main() {
     console.log('Uploading to YouTube as Short...');
     const result = await uploadToYouTube(videoPath, videoInfo);
     console.log(`Upload successful! Video ID: ${result.id}`);
+    console.log(`Video URL: https://youtube.com/watch?v=${result.id}`);
+
+    // Save to uploaded videos list to prevent duplicates
+    saveUploadedVideo(videoInfo.originalSourceUrl, result.id);
 
     // Cleanup
     fs.unlinkSync(videoPath);
