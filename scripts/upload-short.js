@@ -209,26 +209,31 @@ async function uploadToYouTube(videoPath, videoInfo) {
     redirectUri
   );
 
-  oauth2Client.setCredentials({
-    refresh_token: YOUTUBE_REFRESH_TOKEN,
-    access_token: YOUTUBE_ACCESS_TOKEN
-  });
-
-  // Ensure we have a valid access token
+  // Always refresh the access token to ensure it's valid
+  // Access tokens expire after 1 hour, so we refresh every time
   try {
-    if (!YOUTUBE_ACCESS_TOKEN) {
-      console.log('No access token provided, refreshing...');
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      oauth2Client.setCredentials(credentials);
-      console.log('Access token refreshed successfully');
-    }
+    console.log('Refreshing access token...');
+    oauth2Client.setCredentials({
+      refresh_token: YOUTUBE_REFRESH_TOKEN
+    });
+    
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
+    console.log('✅ Access token refreshed successfully');
   } catch (error) {
-    if (error.message.includes('invalid_client')) {
-      throw new Error(`Invalid OAuth client credentials. Please verify:\n` +
-        `1. Client ID and Secret are correct\n` +
-        `2. OAuth client is enabled in Google Cloud Console\n` +
-        `3. YouTube Data API v3 is enabled\n` +
-        `4. Redirect URI matches: ${redirectUri}\n` +
+    if (error.message.includes('invalid_client') || error.message.includes('invalid_grant')) {
+      throw new Error(`Invalid OAuth credentials. Please verify:\n` +
+        `1. Refresh token is valid and not expired\n` +
+        `2. Client ID and Secret are correct\n` +
+        `3. OAuth client is enabled in Google Cloud Console\n` +
+        `4. YouTube Data API v3 is enabled\n` +
+        `5. You may need to generate a new refresh token from OAuth Playground\n` +
+        `Original error: ${error.message}`);
+    }
+    if (error.message.includes('Invalid Credentials')) {
+      throw new Error(`Invalid credentials. The refresh token may have expired or been revoked.\n` +
+        `Please generate a new refresh token from OAuth Playground:\n` +
+        `https://developers.google.com/oauthplayground/\n` +
         `Original error: ${error.message}`);
     }
     throw error;
@@ -282,29 +287,40 @@ async function uploadToYouTube(videoPath, videoInfo) {
   };
   const mimeType = mimeTypes[ext] || 'video/mp4';
 
-  const response = await youtube.videos.insert({
-    part: ['snippet', 'status'],
-    requestBody: {
-      snippet: {
-        title: title,
-        description: description,
-        tags: tags,
-        categoryId: '15',
-        defaultLanguage: 'de',
-        defaultAudioLanguage: 'de'
+  try {
+    const response = await youtube.videos.insert({
+      part: ['snippet', 'status'],
+      requestBody: {
+        snippet: {
+          title: title,
+          description: description,
+          tags: tags,
+          categoryId: '15',
+          defaultLanguage: 'de',
+          defaultAudioLanguage: 'de'
+        },
+        status: {
+          privacyStatus: 'public',
+          selfDeclaredMadeForKids: false
+        }
       },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false
+      media: {
+        body: videoFile,
+        mimeType: mimeType
       }
-    },
-    media: {
-      body: videoFile,
-      mimeType: mimeType
-    }
-  });
+    });
 
-  return response.data;
+    return response.data;
+  } catch (error) {
+    if (error.message && (error.message.includes('Invalid Credentials') || error.message.includes('invalid_grant'))) {
+      throw new Error(`Invalid credentials during upload. Please:\n` +
+        `1. Verify your refresh token is still valid\n` +
+        `2. Generate a new refresh token from OAuth Playground if needed\n` +
+        `3. Check that YouTube Data API v3 is enabled\n` +
+        `Original error: ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 async function main() {
