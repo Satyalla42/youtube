@@ -4,5 +4,4 @@ temp-video.mp4
 .env
 client_secret*.json
 .DS_Store
-uploaded-videos.json
 
