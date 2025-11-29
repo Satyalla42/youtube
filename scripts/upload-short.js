@@ -84,31 +84,32 @@ function selectRandomVideo(data) {
   console.log(`Already uploaded: ${uploadedUrls.size} videos`);
 
   // Filter for videos that are primarily vertical AND not already uploaded
+  // STRICT: Only select videos that have at least one vertical video file
   const verticalHits = hits.filter(hit => {
     // Skip if already uploaded
     if (hit.pageURL && uploadedUrls.has(hit.pageURL)) {
       return false;
     }
     
+    // Must have at least one vertical video file (height > width)
     if (hit.videos) {
       for (const key in hit.videos) {
         if (hit.videos[key] && hit.videos[key].width && hit.videos[key].height) {
           if (hit.videos[key].height > hit.videos[key].width) {
-            return true;
+            return true; // Found at least one vertical video file
           }
         }
       }
     }
-    return false;
+    return false; // No vertical video files found, skip this hit
   });
 
-  const videosToProcess = verticalHits.length > 0 ? verticalHits : hits.filter(hit => 
-    !hit.pageURL || !uploadedUrls.has(hit.pageURL)
-  );
-
-  if (videosToProcess.length === 0) {
-    throw new Error(`No new videos found. All ${hits.length} videos from this search have already been uploaded. Try a different search query or wait for new videos.`);
+  // STRICT: Only process vertical videos - no fallback to non-vertical
+  if (verticalHits.length === 0) {
+    throw new Error(`No vertical videos found. All ${hits.length} videos from this search are either already uploaded or not vertical. YouTube Shorts require vertical videos (height > width). Try a different search query.`);
   }
+  
+  const videosToProcess = verticalHits;
   
   console.log(`Found ${videosToProcess.length} new videos to choose from`);
 
@@ -134,16 +135,25 @@ function selectRandomVideo(data) {
       return videoB.size - videoA.size;
     });
 
+  // STRICT: Only select vertical video files (height > width)
   for (const key of sortedVideoFiles) {
-    downloadUrl = selectedHit.videos[key].url;
-    videoFileKey = key;
-    if (selectedHit.videos[key].height > selectedHit.videos[key].width) {
-      break;
+    const videoFile = selectedHit.videos[key];
+    if (videoFile && videoFile.height && videoFile.width && videoFile.height > videoFile.width) {
+      downloadUrl = videoFile.url;
+      videoFileKey = key;
+      break; // Found a vertical video, use it
     }
   }
 
-  if (!downloadUrl) {
-    throw new Error('No download URL found');
+  // STRICT: Fail if no vertical video file was found
+  if (!downloadUrl || !videoFileKey) {
+    throw new Error('No vertical video file found. YouTube Shorts require vertical videos (height > width). Skipping this video.');
+  }
+  
+  // Double-check the selected video is vertical
+  const selectedVideo = selectedHit.videos[videoFileKey];
+  if (!selectedVideo || !selectedVideo.height || !selectedVideo.width || selectedVideo.height <= selectedVideo.width) {
+    throw new Error(`Selected video file is not vertical (${selectedVideo?.width || 'unknown'}x${selectedVideo?.height || 'unknown'}). YouTube Shorts require vertical videos.`);
   }
 
   return {
@@ -381,19 +391,21 @@ async function main() {
     console.log('Downloading video...');
     await downloadVideo(videoInfo.videoUrl, videoPath);
 
-    // Verify video is vertical (required for Shorts)
-    if (videoInfo.width && videoInfo.height) {
-      const aspectRatio = videoInfo.width / videoInfo.height;
-      const isVertical = videoInfo.height > videoInfo.width;
-      console.log(`Video dimensions: ${videoInfo.width}x${videoInfo.height} (${isVertical ? 'Vertical' : 'Horizontal'})`);
-      console.log(`Aspect ratio: ${aspectRatio.toFixed(2)}`);
-      
-      if (!isVertical) {
-        console.warn('⚠️  Warning: Video is not vertical. YouTube Shorts require vertical videos (9:16 aspect ratio).');
-      } else {
-        console.log('✅ Video is vertical - will be uploaded as a Short');
-      }
+    // STRICT: Verify video is vertical (required for Shorts) - fail if not
+    if (!videoInfo.width || !videoInfo.height) {
+      throw new Error('Video dimensions are missing. Cannot verify if video is vertical.');
     }
+    
+    const aspectRatio = videoInfo.width / videoInfo.height;
+    const isVertical = videoInfo.height > videoInfo.width;
+    console.log(`Video dimensions: ${videoInfo.width}x${videoInfo.height} (${isVertical ? 'Vertical' : 'Horizontal'})`);
+    console.log(`Aspect ratio: ${aspectRatio.toFixed(2)}`);
+    
+    if (!isVertical) {
+      throw new Error(`Video is not vertical (${videoInfo.width}x${videoInfo.height}). YouTube Shorts require vertical videos (height > width, typically 9:16 aspect ratio). Upload cancelled.`);
+    }
+    
+    console.log('✅ Video is vertical - will be uploaded as a Short');
 
     console.log('Uploading to YouTube as Short...');
     const result = await uploadToYouTube(videoPath, videoInfo);
@@ -413,4 +425,5 @@ async function main() {
 }
 
 main();
+
 
